@@ -14,7 +14,8 @@ content/site.json      site name, footer, accent, spectrum bands + neutral thres
 content/photos.yaml    per-photo overrides: title, tags, hidden, featured, hue, prefer
 scripts/build-images   Textures -> generated/ (derivatives + manifest.json + report.md)
 scripts/contact-sheet  generated/contact-sheet.jpg to eyeball the hue sort
-scripts/upload-r2      sync generated/ to a Cloudflare R2 bucket (the image host)
+scripts/upload-r2-api  sync generated/ to the R2 bucket via the wrangler session (npm run upload)
+scripts/upload-r2      same via the S3 API with an R2 token (npm run upload:s3)
 generated/             git-ignored output: sliver/ thumb/ medium/ tex/ + manifest.json
 src/                   the site (Vite + TypeScript, no framework)
 wrangler.jsonc         Cloudflare Worker (static assets) config: SPA fallback + custom domain
@@ -104,14 +105,16 @@ npx wrangler r2 bucket domain add surfaces-images --domain img.textures.lttl.inf
 The CORS policy matters: the WebGL kaleidoscope reads pixels from the image host, which browsers
 only allow for CORS-enabled responses.
 
-Uploading uses the S3 API (fast, parallel, incremental by MD5). Create an R2 API token
-(R2 → Manage R2 API tokens → Object Read & Write on this bucket), copy `.env.example` to `.env`
-and fill in the four `R2_*` values, then:
+Uploading goes through the Cloudflare API using the `wrangler login` session, so no extra token
+is needed. It is parallel and incremental (compares MD5 against the bucket) and never deletes:
 
 ```powershell
 npm run upload -- --dry-run
 npm run upload
 ```
+
+If the session has expired, run `npx wrangler whoami` once to refresh it. Alternative: `npm run
+upload:s3` uses the S3 API with an R2 API token from `.env` (see `.env.example`), handy for CI.
 
 Images are sent with a one-year immutable cache header; `manifest.json` with five minutes.
 Repeat `npm run images` + `npm run upload` whenever you add photos or edit `content/`. Image

@@ -1,9 +1,13 @@
-[
-  {
-    "AllowedOrigins": ["https://textures.lttl.info", "http://localhost:5173", "http://localhost:4173"],
-    "AllowedMethods": ["GET", "HEAD"],
-    "AllowedHeaders": ["*"],
-    "ExposeHeaders": ["ETag"],
-    "MaxAgeSeconds": 86400
-  }
-]
+{
+  "rules": [
+    {
+      "allowed": {
+        "origins": ["https://textures.lttl.info", "http://localhost:5173", "http://localhost:4173"],
+        "methods": ["GET", "HEAD"],
+        "headers": ["*"]
+      },
+      "exposeHeaders": ["ETag"],
+      "maxAgeSeconds": 86400
+    }
+  ]
+}
