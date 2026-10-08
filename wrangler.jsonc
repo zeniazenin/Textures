@@ -1,0 +1,17 @@
+{
+  // Surfaces: a static site deployed as a Cloudflare Worker with static assets.
+  // `npm run build` (with VITE_IMAGE_BASE set) produces dist/, then `npx wrangler deploy` uploads it.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "surfaces",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application",
+    "html_handling": "auto-trailing-slash"
+  },
+  "routes": [
+    { "pattern": "textures.lttl.info", "custom_domain": true }
+  ],
+  "workers_dev": true,
+  "observability": { "enabled": false }
+}

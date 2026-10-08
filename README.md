@@ -17,7 +17,9 @@ scripts/contact-sheet  generated/contact-sheet.jpg to eyeball the hue sort
 scripts/upload-r2      sync generated/ to a Cloudflare R2 bucket (the image host)
 generated/             git-ignored output: sliver/ thumb/ medium/ tex/ + manifest.json
 src/                   the site (Vite + TypeScript, no framework)
-public/_redirects      Cloudflare Pages SPA fallback for /studio/*
+wrangler.jsonc         Cloudflare Worker (static assets) config: SPA fallback + custom domain
+infra/r2-cors.json     CORS policy for the R2 image bucket
+.github/workflows/     deploy on push to main
 ```
 
 The site is fully static. At runtime it fetches `manifest.json` and images from `VITE_IMAGE_BASE`
@@ -70,45 +72,53 @@ npm run typecheck
 
 ## Deploy
 
-### 1. Images → Cloudflare R2
+Everything below is driven by the `wrangler` CLI (no dashboard clicking except enabling R2 and
+creating two tokens). One-time: `npx wrangler login`.
 
-1. Cloudflare dashboard → **R2** → *Create bucket* (e.g. `surfaces-images`), location automatic.
-2. Bucket → **Settings** → *Custom domains* → add `img.textures.lttl.info` (the `lttl.info` zone must
-   be on Cloudflare; the DNS record is created for you). Public access via the custom domain is
-   enough; the `r2.dev` URL can stay disabled.
-3. Bucket → **Settings** → *CORS policy* → paste (the kaleidoscope reads pixels from a different
-   origin, so WebGL needs CORS):
-   ```json
-   [{ "AllowedOrigins": ["https://textures.lttl.info", "http://localhost:5173", "http://localhost:4173"],
-      "AllowedMethods": ["GET", "HEAD"], "AllowedHeaders": ["*"], "MaxAgeSeconds": 86400 }]
-   ```
-4. R2 → *Manage R2 API tokens* → create a token with **Object Read & Write** on this bucket.
-   Copy `.env.example` to `.env` and fill in `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
-   `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`.
-5. Upload (incremental, compares MD5 so re-runs only send changed files):
-   ```powershell
-   npm run upload -- --dry-run
-   npm run upload
-   ```
-   Images are sent with a one-year immutable cache header; `manifest.json` with five minutes.
-   Repeat `npm run images` + `npm run upload` whenever you add photos or edit `content/`.
+### 1. Site → Cloudflare Worker (static assets) at textures.lttl.info
 
-Why R2 and not the git repo: the derivatives are ~1 GB, Cloudflare Pages has a 25 MB per-file
-limit and no Git LFS, and R2 has free egress with 10 GB of free storage.
+The site is deployed as a Worker with static assets (`wrangler.jsonc`): SPA fallback for
+`/studio/*` and the custom domain `textures.lttl.info` are declared there, and Cloudflare creates
+the DNS record for the custom domain itself.
 
-### 2. Site → Cloudflare Pages (from GitHub)
+```powershell
+$env:VITE_IMAGE_BASE = "https://img.textures.lttl.info"; npm run build; npx wrangler deploy
+```
 
-1. Push this repo to GitHub (`generated/`, `.env` and `node_modules/` are git-ignored).
-2. Cloudflare → **Workers & Pages** → *Create* → *Pages* → connect the repo.
-   - Build command: `npm run build`
-   - Build output directory: `dist`
-   - Environment variable: `VITE_IMAGE_BASE = https://img.textures.lttl.info`
-   - Node version: set `NODE_VERSION = 20` (or newer) if the default is older.
-3. Project → **Custom domains** → add `textures.lttl.info`.
-4. `public/_redirects` makes `/studio/<id>` resolve to the app (SPA fallback).
+Automatic deploys from GitHub: `.github/workflows/deploy.yml` runs the same build + deploy on every
+push to `main`. It needs two repository secrets, `CLOUDFLARE_API_TOKEN` (dashboard → My Profile →
+API Tokens → "Edit Cloudflare Workers" template) and `CLOUDFLARE_ACCOUNT_ID`. Until those are set,
+deploy manually with the command above.
 
-Every push to the production branch redeploys the site. Image changes never need a deploy, only
-`npm run upload`.
+### 2. Images → Cloudflare R2 at img.textures.lttl.info
+
+R2 must be enabled once in the dashboard (R2 → Get started; the free tier needs a payment method on
+file but is not charged under 10 GB). Then:
+
+```powershell
+npx wrangler r2 bucket create surfaces-images
+npx wrangler r2 bucket cors set surfaces-images --file infra/r2-cors.json
+npx wrangler r2 bucket domain add surfaces-images --domain img.textures.lttl.info --zone-id f03789c947d4af3d85f8fbe3c1205f8e
+```
+
+The CORS policy matters: the WebGL kaleidoscope reads pixels from the image host, which browsers
+only allow for CORS-enabled responses.
+
+Uploading uses the S3 API (fast, parallel, incremental by MD5). Create an R2 API token
+(R2 → Manage R2 API tokens → Object Read & Write on this bucket), copy `.env.example` to `.env`
+and fill in the four `R2_*` values, then:
+
+```powershell
+npm run upload -- --dry-run
+npm run upload
+```
+
+Images are sent with a one-year immutable cache header; `manifest.json` with five minutes.
+Repeat `npm run images` + `npm run upload` whenever you add photos or edit `content/`. Image
+changes never need a site deploy.
+
+Why R2 and not the git repo: the derivatives are ~900 MB, Workers static assets are capped at
+25 MiB per file and 20k files, and R2 has free egress with 10 GB of free storage.
 
 ## Editing content
 
