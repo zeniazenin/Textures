@@ -17,7 +17,7 @@ const args = process.argv.slice(2);
 const flag = (n, d) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : d; };
 const DRY = args.includes('--dry-run');
 const BUCKET = flag('--bucket', process.env.R2_BUCKET || 'surfaces-images');
-const CONCURRENCY = Number(flag('--concurrency', 12));
+const CONCURRENCY = Number(flag('--concurrency', 6));
 const INCLUDE_DIRS = new Set(['sliver', 'thumb', 'medium', 'tex', 'large']);
 const INCLUDE_FILES = new Set(['manifest.json']);
 const TYPES = { '.webp': 'image/webp', '.jpg': 'image/jpeg', '.avif': 'image/avif', '.json': 'application/json', '.png': 'image/png' };
@@ -47,10 +47,13 @@ function refreshToken() {
 
 let token = await readToken();
 const accountId = process.env.CLOUDFLARE_ACCOUNT_ID || await (async () => {
-  const r = await fetch('https://api.cloudflare.com/client/v4/accounts', { headers: { Authorization: `Bearer ${token}` } });
-  const j = await r.json();
-  if (!j.success || !j.result?.length) throw new Error('Could not list accounts: ' + JSON.stringify(j.errors));
-  return j.result[0].id;
+  for (let attempt = 0; ; attempt++) {
+    const r = await fetch('https://api.cloudflare.com/client/v4/accounts', { headers: { Authorization: `Bearer ${token}` } });
+    const j = await r.json();
+    if (j.success && j.result?.length) return j.result[0].id;
+    if (r.status === 429 && attempt < 5) { await new Promise((res) => setTimeout(res, 5000 * (attempt + 1))); continue; }
+    throw new Error('Could not list accounts (set CLOUDFLARE_ACCOUNT_ID to skip this): ' + JSON.stringify(j.errors));
+  }
 })();
 const base = `https://api.cloudflare.com/client/v4/accounts/${accountId}/r2/buckets/${BUCKET}/objects`;
 
@@ -75,15 +78,30 @@ console.log(`${local.length} local files, ${remote.size} already in bucket "${BU
 
 let uploaded = 0, skipped = 0, failed = 0, bytes = 0;
 const queue = [...local];
+const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+let slowUntil = 0; // global brake after a 429
 async function put(key, buf, headers, attempt = 0) {
-  const r = await fetch(`${base}/${key.split('/').map(encodeURIComponent).join('/')}`, {
-    method: 'PUT', body: buf,
-    headers: { Authorization: `Bearer ${token}`, ...headers },
-  });
+  if (Date.now() < slowUntil) await sleep(slowUntil - Date.now());
+  let r;
+  try {
+    r = await fetch(`${base}/${key.split('/').map(encodeURIComponent).join('/')}`, {
+      method: 'PUT', body: buf,
+      headers: { Authorization: `Bearer ${token}`, ...headers },
+    });
+  } catch (err) {
+    if (attempt < 5) { await sleep(1500 * (attempt + 1)); return put(key, buf, headers, attempt + 1); }
+    throw err;
+  }
   if (r.ok) return;
   const text = await r.text();
   if ((r.status === 401 || r.status === 403) && attempt < 2) { refreshToken(); token = await readToken(); return put(key, buf, headers, attempt + 1); }
-  if (r.status >= 500 && attempt < 3) { await new Promise((res) => setTimeout(res, 1000 * (attempt + 1))); return put(key, buf, headers, attempt + 1); }
+  if (r.status === 429 && attempt < 8) {
+    const wait = Math.min(30000, 2000 * 2 ** attempt);
+    slowUntil = Math.max(slowUntil, Date.now() + wait);
+    await sleep(wait);
+    return put(key, buf, headers, attempt + 1);
+  }
+  if (r.status >= 500 && attempt < 4) { await sleep(1000 * (attempt + 1)); return put(key, buf, headers, attempt + 1); }
   throw new Error(`HTTP ${r.status}: ${text.slice(0, 200)}`);
 }
 async function worker() {
