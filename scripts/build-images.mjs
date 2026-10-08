@@ -251,30 +251,30 @@ const hueStart = site.spectrum?.hueStart ?? 0;
 const bandsCfg = site.spectrum?.bands ?? [];
 const rel = (h) => (((h - hueStart) % 360) + 360) % 360; // hue relative to the spectrum start
 
-const photos = [];
-let hiddenCount = 0;
+const all = []; // every processed photo, hidden ones included (for the management UI)
 for (const r of ok) {
   const stem = r.file.replace(/\.[^.]+$/, '');
   const ov = overrides.get(stem.toLowerCase()) || overrides.get(r.id) || overrides.get(kindOf(stem).base.toLowerCase()) || {};
-  if (ov.hidden) { hiddenCount++; continue; }
   let hue = r.hue, neutral = r.chroma < neutralChroma;
   if (ov.hue === 'neutral') neutral = true;
   else if (typeof ov.hue === 'number') { hue = ((ov.hue % 360) + 360) % 360; neutral = false; }
-  photos.push({
-    id: r.id, source: r.file, title: typeof ov.title === 'string' ? ov.title : '',
+  all.push({
+    id: r.id, source: r.file, stem, title: typeof ov.title === 'string' ? ov.title : '',
     tags: Array.isArray(ov.tags) ? ov.tags.map(String) : [],
-    featured: !!ov.featured,
+    featured: !!ov.featured, hidden: !!ov.hidden,
     width: r.width, height: r.height, aspect: r.aspect, takenAt: r.takenAt,
     color: r.color, hue, chroma: r.chroma, lightness: r.lightness, neutral, blurhash: r.blurhash,
     seed: parseInt(r.dhash.slice(0, 6), 16) % 1000,
     sizes: r.sizes, _dhash: r.dhash,
   });
 }
-photos.sort((a, b) => {
+all.sort((a, b) => {
   if (a.neutral !== b.neutral) return a.neutral ? 1 : -1;
   if (a.neutral) return b.lightness - a.lightness; // neutrals: light -> dark
   return rel(a.hue) - rel(b.hue) || a.id.localeCompare(b.id);
 });
+const photos = all.filter((p) => !p.hidden);
+const hiddenCount = all.length - photos.length;
 photos.forEach((p, i) => { p.no = i + 1; });
 
 // Band boundaries (fractions of the list) for the axis labels.
@@ -309,9 +309,14 @@ const manifest = {
   count: photos.length,
   bands,
   tags: tagCounts,
-  photos: photos.map(({ _dhash, ...p }) => p),
+  photos: photos.map(({ _dhash, stem, hidden, ...p }) => p),
 };
 await fs.writeFile(path.join(OUT, 'manifest.json'), JSON.stringify(manifest));
+await fs.writeFile(path.join(OUT, 'catalog.json'), JSON.stringify({
+  generatedAt: manifest.generatedAt, sizes: manifest.sizes, formats: manifest.formats, bands,
+  variants: variantReport, nearDuplicates: nearDupes, errors: errors.map((e) => ({ file: e.file, error: e.error })),
+  photos: all.map(({ _dhash, ...p }) => ({ ...p, no: p.hidden ? null : p.no })),
+}));
 await fs.writeFile(path.join(OUT, 'manifest.pretty.json'), JSON.stringify(manifest, null, 2));
 
 const md = [

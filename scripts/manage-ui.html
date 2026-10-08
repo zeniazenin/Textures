@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Surfaces manager</title>
+<style>
+  :root { --bg:#131211; --panel:#1b1a18; --text:#ECE7DF; --muted:#A39C92; --line:rgba(236,231,223,.14); --accent:#FF5A36; --ok:#4FC3B4; --warn:#F2C14E; }
+  * { box-sizing:border-box }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.5 system-ui, 'Instrument Sans', sans-serif; }
+  header { position:sticky; top:0; z-index:5; background:rgba(19,18,17,.96); backdrop-filter:blur(6px); border-bottom:1px solid var(--line); padding:12px 20px; display:flex; flex-wrap:wrap; gap:10px 18px; align-items:center; }
+  header h1 { font-size:18px; margin:0 14px 0 0; letter-spacing:.04em; text-transform:uppercase }
+  .stat { color:var(--muted); font-family:ui-monospace, monospace; font-size:12px }
+  .stat b { color:var(--text) }
+  button, select, input[type=text] { font:inherit; color:inherit; background:transparent; border:1px solid var(--line); border-radius:6px; padding:6px 12px; }
+  button { cursor:pointer } button:hover { border-color:var(--text) } button:disabled { opacity:.5; cursor:default }
+  button.accent { background:var(--accent); color:#131211; border-color:var(--accent); font-weight:600 }
+  button.danger { border-color:#c0392b; color:#ff8a76 }
+  .filters { display:flex; gap:6px; flex-wrap:wrap; margin-left:auto }
+  .filters button[aria-pressed=true] { background:var(--text); color:#131211; border-color:var(--text) }
+  main { padding:20px }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:14px }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:hidden; display:flex; flex-direction:column; position:relative }
+  .card.hidden { opacity:.45 }
+  .card.hidden .ph::after { content:'HIDDEN'; position:absolute; inset:auto 8px 8px auto; background:#c0392b; color:#fff; font:600 11px/1 ui-monospace, monospace; padding:5px 7px; border-radius:4px }
+  .card.featured .ph::before { content:'FEATURED'; position:absolute; left:8px; bottom:8px; background:var(--accent); color:#131211; font:600 11px/1 ui-monospace, monospace; padding:5px 7px; border-radius:4px; z-index:1 }
+  .card.selected { outline:2px solid var(--ok) }
+  .ph { position:relative; aspect-ratio:3/4; background:#333; cursor:pointer }
+  .ph img { width:100%; height:100%; object-fit:cover; display:block }
+  .ph .sel { position:absolute; top:8px; left:8px; width:22px; height:22px; margin:0; accent-color:var(--ok); cursor:pointer }
+  .meta { padding:8px 10px; display:flex; flex-direction:column; gap:6px; font-size:12px }
+  .meta .no { font-family:ui-monospace, monospace; color:var(--muted); display:flex; justify-content:space-between; align-items:center }
+  .meta .no .sw { width:12px; height:12px; border-radius:50%; display:inline-block; margin-right:6px; vertical-align:-2px }
+  .meta input[type=text] { width:100%; padding:5px 8px; font-size:12px }
+  .meta .row { display:flex; gap:6px }
+  .meta .row button { flex:1; padding:5px 0; font-size:12px }
+  .empty { color:var(--muted); padding:40px; text-align:center }
+  #log { display:none; position:fixed; right:16px; bottom:16px; width:min(560px, calc(100vw - 32px)); max-height:50vh; background:#000; color:#ddd; border:1px solid var(--line); border-radius:8px; padding:12px; font:12px/1.4 ui-monospace, monospace; white-space:pre-wrap; overflow:auto; z-index:9 }
+  #log.open { display:block }
+  #log .close { position:sticky; top:0; float:right }
+  #drop { border:1px dashed var(--line); border-radius:8px; padding:14px 18px; color:var(--muted); margin-bottom:18px; display:flex; gap:14px; align-items:center; flex-wrap:wrap }
+  #drop.over { border-color:var(--ok); color:var(--text) }
+  #pending { color:var(--warn) }
+  .toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:var(--text); color:#131211; padding:10px 16px; border-radius:999px; font-weight:600; opacity:0; transition:opacity .2s; pointer-events:none; z-index:10 }
+  .toast.show { opacity:1 }
+  dialog { background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:10px; max-width:min(92vw, 1100px); padding:0 }
+  dialog::backdrop { background:rgba(0,0,0,.7) }
+  dialog img { max-width:min(88vw, 1000px); max-height:80vh; display:block }
+  dialog .bar { padding:10px 14px; display:flex; gap:10px; align-items:center; justify-content:space-between; font-family:ui-monospace, monospace; font-size:12px; color:var(--muted) }
+</style>
+</head>
+<body>
+<header>
+  <h1>Surfaces manager</h1>
+  <span class="stat" id="stats">loading…</span>
+  <div class="filters" role="group" aria-label="Filter">
+    <button data-f="all" aria-pressed="true">All</button>
+    <button data-f="visible">Visible</button>
+    <button data-f="hidden">Hidden</button>
+    <button data-f="untagged">Untagged</button>
+    <button data-f="untitled">Untitled</button>
+    <button data-f="dupes">Near-duplicates</button>
+  </div>
+  <button id="bulkHide" disabled>Hide selected</button>
+  <button id="bulkShow" disabled>Unhide selected</button>
+  <button id="scan" title="Process new files in Textures/ and rebuild the manifest">Scan library</button>
+  <button id="publish" class="accent" title="Rebuild, upload new derivatives to R2 and remove hidden ones">Publish to site</button>
+</header>
+<main>
+  <div id="drop">
+    <strong>Add photos:</strong> drop JPG / CR2 files here or <label style="text-decoration:underline; cursor:pointer">choose files<input id="file" type="file" multiple accept=".jpg,.jpeg,.cr2,.png,.tif,.tiff,.heic" hidden></label>.
+    They are copied into <code>Textures/</code> (existing files are never overwritten). Then click <em>Scan library</em>, review, and <em>Publish</em>.
+    <span id="pending"></span>
+  </div>
+  <div class="grid" id="grid"></div>
+  <p class="empty" id="empty" hidden>Nothing here.</p>
+</main>
+<pre id="log"><button class="close" onclick="document.getElementById('log').classList.remove('open')">close</button><span id="logtext"></span></pre>
+<div class="toast" id="toast"></div>
+<dialog id="viewer"><div class="bar"><span id="viewerMeta"></span><button onclick="document.getElementById('viewer').close()">close</button></div><img id="viewerImg" alt=""></dialog>
+
+<script>
+const $ = (s) => document.querySelector(s);
+let cat = null, filter = 'all', selected = new Set();
+const dupeSet = () => new Set((cat.nearDuplicates || []).flatMap((d) => [d.a, d.b]));
+const hsl = (p) => p.neutral ? '#777' : `hsl(${Math.round(p.hue)}, 80%, 50%)`;
+
+async function load() {
+  cat = await (await fetch('/api/catalog')).json();
+  render();
+}
+function visiblePhotos() {
+  const d = dupeSet();
+  return cat.photos.filter((p) => {
+    if (filter === 'visible') return !p.hidden;
+    if (filter === 'hidden') return p.hidden;
+    if (filter === 'untagged') return !p.hidden && p.tags.length === 0;
+    if (filter === 'untitled') return !p.hidden && !p.title;
+    if (filter === 'dupes') return d.has(p.source);
+    return true;
+  });
+}
+function render() {
+  const total = cat.photos.length, hidden = cat.photos.filter((p) => p.hidden).length;
+  cat.tags = {}; for (const p of cat.photos) if (!p.hidden) for (const t of p.tags) cat.tags[t] = (cat.tags[t] || 0) + 1;
+  $('#stats').innerHTML = `<b>${total - hidden}</b> published · <b>${hidden}</b> hidden · <b>${cat.sourceCount}</b> files in Textures/ · ${Object.keys(cat.tags).length} tags · scanned ${cat.generatedAt ? new Date(cat.generatedAt).toLocaleString() : 'never'}`;
+  $('#pending').textContent = cat.pending.length ? `${cat.pending.length} new file(s) not scanned yet: ${cat.pending.slice(0, 5).join(', ')}${cat.pending.length > 5 ? '…' : ''}` : '';
+  if (cat.errors?.length) $('#pending').textContent += `  ·  ${cat.errors.length} file(s) failed to decode (see generated/report.md)`;
+  const list = visiblePhotos();
+  const grid = $('#grid'); grid.replaceChildren();
+  $('#empty').hidden = list.length > 0;
+  const dupes = dupeSet();
+  for (const p of list) {
+    const card = document.createElement('div');
+    card.className = 'card' + (p.hidden ? ' hidden' : '') + (p.featured ? ' featured' : '') + (selected.has(p.stem) ? ' selected' : '');
+    card.innerHTML = `
+      <div class="ph" style="background:${p.color}">
+        <input type="checkbox" class="sel" ${selected.has(p.stem) ? 'checked' : ''} aria-label="Select ${p.source}">
+        <img loading="lazy" src="/img/thumb/${p.id}.webp" alt="">
+      </div>
+      <div class="meta">
+        <div class="no"><span><i class="sw" style="background:${hsl(p)}"></i>${p.no ? 'No. ' + String(p.no).padStart(3, '0') : 'hidden'}${dupes.has(p.source) ? ' · <span style="color:var(--warn)">dupe?</span>' : ''}</span><span title="${p.source}">${p.source.length > 18 ? p.source.slice(0, 16) + '…' : p.source}</span></div>
+        <input type="text" class="title" placeholder="Title (optional)" value="${esc(p.title)}">
+        <input type="text" class="tags" placeholder="Tags, comma separated" value="${esc(p.tags.join(', '))}">
+        <div class="row">
+          <button class="toggle ${p.hidden ? '' : 'danger'}">${p.hidden ? 'Unhide' : 'Hide'}</button>
+          <button class="feat" ${p.featured ? 'disabled' : ''}>${p.featured ? 'Featured' : 'Feature'}</button>
+        </div>
+      </div>`;
+    card.querySelector('.ph img').addEventListener('click', () => view(p));
+    card.querySelector('.sel').addEventListener('change', (e) => { e.target.checked ? selected.add(p.stem) : selected.delete(p.stem); card.classList.toggle('selected', e.target.checked); bulkState(); });
+    card.querySelector('.toggle').addEventListener('click', () => save(p, { hidden: !p.hidden }));
+    card.querySelector('.feat').addEventListener('click', () => save(p, { featured: true }));
+    const title = card.querySelector('.title'), tags = card.querySelector('.tags');
+    title.addEventListener('change', () => save(p, { title: title.value }));
+    tags.addEventListener('change', () => save(p, { tags: tags.value }));
+    grid.append(card);
+  }
+  bulkState();
+}
+function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+function bulkState() { $('#bulkHide').disabled = $('#bulkShow').disabled = selected.size === 0; }
+async function save(p, patch, silent) {
+  const r = await fetch('/api/photo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stem: p.stem, patch }) });
+  if (!r.ok) { toast('Save failed: ' + (await r.json()).error); return; }
+  if ('hidden' in patch) p.hidden = patch.hidden;
+  if ('title' in patch) p.title = String(patch.title).trim();
+  if ('tags' in patch) p.tags = String(patch.tags).split(/[,/]/).map((t) => t.trim()).filter(Boolean);
+  if (patch.featured) { for (const q of cat.photos) q.featured = false; p.featured = true; }
+  if (!silent) { toast('Saved to content/photos.yaml'); render(); }
+}
+function view(p) {
+  $('#viewerImg').src = `/img/medium/${p.id}.webp`;
+  $('#viewerMeta').textContent = `${p.source} · ${p.width}×${p.height} · hue ${Math.round(p.hue)} · chroma ${p.chroma} · ${p.takenAt || 'no date'}`;
+  $('#viewer').showModal();
+}
+let toastT; function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 1800); }
+
+document.querySelectorAll('.filters button').forEach((b) => b.addEventListener('click', () => { filter = b.dataset.f; document.querySelectorAll('.filters button').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); render(); }));
+$('#bulkHide').addEventListener('click', () => bulk(true));
+$('#bulkShow').addEventListener('click', () => bulk(false));
+async function bulk(hidden) {
+  for (const p of cat.photos) if (selected.has(p.stem)) await save(p, { hidden }, true);
+  selected.clear(); toast(hidden ? 'Hidden' : 'Unhidden'); render();
+}
+
+async function run(task) {
+  const log = $('#log'), text = $('#logtext'); text.textContent = ''; log.classList.add('open');
+  $('#scan').disabled = $('#publish').disabled = true;
+  try {
+    const r = await fetch('/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ task }) });
+    const reader = r.body.getReader(); const dec = new TextDecoder();
+    while (true) { const { value, done } = await reader.read(); if (done) break; text.textContent += dec.decode(value).replace(/\r/g, '\n'); log.scrollTop = log.scrollHeight; }
+  } finally { $('#scan').disabled = $('#publish').disabled = false; await load(); }
+}
+$('#scan').addEventListener('click', () => run('scan'));
+$('#publish').addEventListener('click', () => { if (confirm('Rebuild derivatives, upload new ones to R2 and delete hidden ones from the bucket?')) run('publish'); });
+
+// Adding files
+const drop = $('#drop');
+drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('over'); addFiles(e.dataTransfer.files); });
+$('#file').addEventListener('change', (e) => addFiles(e.target.files));
+async function addFiles(files) {
+  let ok = 0, fail = [];
+  for (const f of files) {
+    const r = await fetch('/api/add', { method: 'POST', headers: { 'X-Filename': encodeURIComponent(f.name) }, body: f });
+    if (r.ok) ok++; else fail.push(`${f.name}: ${(await r.json()).error}`);
+  }
+  toast(`${ok} file(s) added to Textures/${fail.length ? `, ${fail.length} skipped` : ''}`);
+  if (fail.length) alert(fail.join('\n'));
+  await load();
+}
+load();
+</script>
+</body>
+</html>

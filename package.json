@@ -13,7 +13,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "upload:s3": "node scripts/upload-r2.mjs"
+    "upload:s3": "node scripts/upload-r2.mjs",
+    "manage": "node scripts/manage.mjs",
+    "sync": "node scripts/build-images.mjs && node scripts/upload-r2-api.mjs --prune"
   },
   "engines": {
     "node": ">=20"

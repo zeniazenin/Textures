@@ -2,7 +2,9 @@
 // Upload generated/ to R2 through the Cloudflare REST API using the OAuth session that
 // `npx wrangler login` stored. No R2 API token needed. Incremental by MD5 (ETag). Never deletes.
 //
-//   node scripts/upload-r2-api.mjs [--dry-run] [--bucket surfaces-images] [--concurrency 12]
+//   node scripts/upload-r2-api.mjs [--dry-run] [--prune] [--bucket surfaces-images] [--concurrency 6]
+// Only derivatives of photos listed in manifest.json (i.e. not hidden) are uploaded.
+// --prune deletes bucket objects that are no longer expected (hidden or removed photos).
 //
 // If the OAuth token has expired, run `npx wrangler whoami` once to refresh it, then re-run.
 import fs from 'node:fs/promises';
@@ -10,16 +12,16 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import { expectedKeys } from './lib/expected-keys.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'generated');
 const args = process.argv.slice(2);
 const flag = (n, d) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : d; };
 const DRY = args.includes('--dry-run');
+const PRUNE = args.includes('--prune');
 const BUCKET = flag('--bucket', process.env.R2_BUCKET || 'surfaces-images');
 const CONCURRENCY = Number(flag('--concurrency', 6));
-const INCLUDE_DIRS = new Set(['sliver', 'thumb', 'medium', 'tex', 'large']);
-const INCLUDE_FILES = new Set(['manifest.json']);
 const TYPES = { '.webp': 'image/webp', '.jpg': 'image/jpeg', '.avif': 'image/avif', '.json': 'application/json', '.png': 'image/png' };
 
 function wranglerConfigPath() {
@@ -57,11 +59,12 @@ const accountId = process.env.CLOUDFLARE_ACCOUNT_ID || await (async () => {
 })();
 const base = `https://api.cloudflare.com/client/v4/accounts/${accountId}/r2/buckets/${BUCKET}/objects`;
 
-// Local files
+// Local files: only what the manifest publishes
+const { keys: expected } = await expectedKeys(OUT);
 const local = [];
-for (const d of await fs.readdir(OUT, { withFileTypes: true })) {
-  if (d.isDirectory() && INCLUDE_DIRS.has(d.name)) for (const f of await fs.readdir(path.join(OUT, d.name))) local.push(`${d.name}/${f}`);
-  else if (d.isFile() && INCLUDE_FILES.has(d.name)) local.push(d.name);
+for (const key of expected) {
+  try { await fs.access(path.join(OUT, key)); local.push(key); }
+  catch { console.warn(`missing locally (run npm run images): ${key}`); }
 }
 
 // Remote etags
@@ -124,4 +127,18 @@ async function worker() {
 }
 await Promise.all(Array.from({ length: CONCURRENCY }, worker));
 console.log(`\n${DRY ? 'Would upload' : 'Uploaded'} ${uploaded} file(s)${DRY ? '' : ` (${(bytes / 1048576).toFixed(1)} MB)`}, ${skipped} unchanged, ${failed} failed, ${local.length} total.`);
+
+// Prune: remove objects for hidden/removed photos
+const stale = [...remote.keys()].filter((k) => !expected.has(k));
+if (stale.length && !PRUNE) console.log(`${stale.length} object(s) in the bucket are no longer published; run with --prune to delete them.`);
+if (stale.length && PRUNE) {
+  let deleted = 0;
+  for (const key of stale) {
+    if (DRY) { console.log(`would delete ${key}`); deleted++; continue; }
+    const r = await fetch(`${base}/${key.split('/').map(encodeURIComponent).join('/')}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+    if (r.ok) deleted++; else console.log(`  !! delete ${key}: HTTP ${r.status}`);
+    await sleep(60);
+  }
+  console.log(`${DRY ? 'Would delete' : 'Deleted'} ${deleted} stale object(s).`);
+}
 if (failed) process.exitCode = 1;

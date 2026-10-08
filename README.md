@@ -14,6 +14,7 @@ content/site.json      site name, footer, accent, spectrum bands + neutral thres
 content/photos.yaml    per-photo overrides: title, tags, hidden, featured, hue, prefer
 scripts/build-images   Textures -> generated/ (derivatives + manifest.json + report.md)
 scripts/contact-sheet  generated/contact-sheet.jpg to eyeball the hue sort
+scripts/manage         local management UI: add/hide photos, titles, tags, publish (npm run manage)
 scripts/upload-r2-api  sync generated/ to the R2 bucket via the wrangler session (npm run upload)
 scripts/upload-r2      same via the S3 API with an R2 token (npm run upload:s3)
 generated/             git-ignored output: sliver/ thumb/ medium/ tex/ + manifest.json
@@ -122,6 +123,27 @@ changes never need a site deploy.
 
 Why R2 and not the git repo: the derivatives are ~900 MB, Workers static assets are capped at
 25 MiB per file and 20k files, and R2 has free egress with 10 GB of free storage.
+
+## Adding and removing photos
+
+```powershell
+npm run manage        # opens the local manager at http://localhost:5180
+```
+
+The manager (owner-only, never deployed) shows every photo in spectrum order with its hue swatch.
+From there you can:
+
+- **Add photos**: drop JPG/CR2 files on the page (copied into `Textures/`, existing files are never
+  overwritten), then click **Scan library** to process them.
+- **Remove photos you don't like**: click **Hide**. Hidden photos leave the site and the R2 bucket
+  on the next publish; the original file stays in `Textures/` (the library is never deleted from).
+  Filters: Visible / Hidden / Untagged / Untitled / Near-duplicates. Tick several cards for bulk hide.
+- **Titles, tags, featured photo**: edit inline; everything is saved to `content/photos.yaml`
+  immediately (the file stays hand-editable, comments are preserved).
+- **Publish to site**: runs the pipeline and uploads new derivatives to R2, deleting derivatives of
+  hidden photos. Equivalent command line: `npm run sync` (= `npm run images` + `npm run upload -- --prune`).
+
+Without the UI: copy files into `Textures/`, edit `content/photos.yaml`, run `npm run sync`.
 
 ## Editing content
 
