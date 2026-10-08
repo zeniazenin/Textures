@@ -1,0 +1,15 @@
+# Human-edited metadata overrides, keyed by the SOURCE FILE STEM (filename without
+# extension, e.g. "20221017_143414" or "IMG_2569"). Everything is optional.
+#
+#   20221017_143414:
+#     title: Crazed paint over rust      # leave out to show "No. 042" only
+#     tags: [Paint, Rust]                # material tags; chips appear only for tags that occur
+#     hidden: true                       # exclude from the site
+#     featured: true                     # hero/default photo (first featured wins; else random per visit)
+#     hue: 210                           # manual hue override in degrees (0–360); use "neutral" to force the neutral band
+#     prefer: 20221017_143414_Original   # for variant groups: which source file to publish
+#
+# Variant groups are collapsed automatically (base + _Original / -EDIT / -01 ⇒ one photo,
+# preferring -EDIT > -01 > base > _Original). See generated/report.md after a build.
+
+{}

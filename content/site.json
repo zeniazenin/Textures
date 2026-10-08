@@ -1,0 +1,26 @@
+{
+  "name": "Surfaces",
+  "tagline": "A texture archive",
+  "url": "https://textures.lttl.info",
+  "description": "Close-up photographs of weathered surfaces — stone, rust, paint, paper — navigable by colour, each one foldable into a live kaleidoscope.",
+  "footer": {
+    "copyright": "Photographs © [YOUR NAME]",
+    "contact": "[CONTACT / INSTAGRAM]",
+    "contactUrl": ""
+  },
+  "heroEyebrowTags": "stone · rust · paint · paper",
+  "featured": null,
+  "accent": "#FF5A36",
+  "spectrum": {
+    "neutralChroma": 0.06,
+    "hueStart": 345,
+    "bands": [
+      ["Reds", 345],
+      ["Ochres", 28],
+      ["Greens", 80],
+      ["Teals", 150],
+      ["Blues", 200],
+      ["Violets", 265]
+    ]
+  }
+}

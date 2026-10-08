@@ -1,0 +1,13 @@
+node_modules/
+dist/
+generated/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+Thumbs.db
+
+# Source photo library (2.4 GB, read-only, lives only on the owner's machine / backups)
+Textures/
+.claude/settings.local.json

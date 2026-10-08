@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Kaleidoscope</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#131211}
+</style>
+</helmet>
+<div onPointerMove="{{onMove}}" role="img" aria-label="Kaleidoscope made from a texture photograph" style="position: relative; width: 100%; aspect-ratio: 1 / 1; border-radius: 50%; overflow: hidden; background: #0B0A0A; touch-action: none; isolation: isolate; cursor: crosshair">
+  <sc-for list="{{wedges}}" as="w" hint-placeholder-count="12">
+    <div style="position: absolute; inset: 0; transform: {{w.rot}}; clip-path: {{w.clip}}">
+      <div style="position: absolute; inset: 0; transform: {{w.flip}}">
+        <div style="position: absolute; inset: 0; transform: {{w.spin}}">
+          <img src="{{w.src}}" alt="" draggable="false" style="position: absolute; left: 50%; top: 50%; width: {{w.size}}; height: {{w.size}}; max-width: none; object-fit: cover; display: block; transform: {{w.shift}}; user-select: none; pointer-events: none">
+        </div>
+      </div>
+    </div>
+  </sc-for>
+  <div aria-hidden="true" style="position: absolute; inset: 0; border-radius: 50%; pointer-events: none; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.10), inset 0 0 90px rgba(0,0,0,0.55)"></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"src":{"editor":null,"default":"/_blob/a32aff0bace79be02909756860692637"},"segments":{"editor":"int","min":4,"max":32,"step":2,"default":12},"zoom":{"editor":"range","min":1.2,"max":4,"step":0.05,"default":1.8},"speed":{"editor":"range","min":0,"max":60,"step":1,"unit":"°/s","default":12},"paused":{"editor":"boolean","default":false},"seed":{"editor":null,"default":0},"$preview":{"width":720,"height":720}}'>
+class Component extends DCLogic {
+  componentDidMount() {
+    this.tx = 0; this.ty = 0; this.px = 0; this.py = 0;
+    this.t = 0; this.theta = 0; this.last = performance.now();
+    let rm = false;
+    try { rm = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+    const tick = (now) => {
+      const dt = Math.min(64, now - this.last); this.last = now;
+      const still = !!this.props.paused || rm;
+      if (!still) {
+        this.t += dt;
+        this.theta = (this.theta + dt * Number(this.props.speed ?? 12) / 1000) % 360;
+      }
+      const ex = this.tx - this.px, ey = this.ty - this.py;
+      const settling = Math.abs(ex) > 0.0005 || Math.abs(ey) > 0.0005;
+      this.px += ex * 0.07; this.py += ey * 0.07;
+      if (!still || settling || !this.drawn) {
+        this.drawn = true;
+        this.setState({ t: this.t, theta: this.theta, px: this.px, py: this.py });
+      }
+      this.raf = requestAnimationFrame(tick);
+    };
+    this.raf = requestAnimationFrame(tick);
+  }
+
+  componentWillUnmount() { cancelAnimationFrame(this.raf); }
+
+  renderVals() {
+    const st = this.state || {};
+    let n = Math.round(Number(this.props.segments ?? 12));
+    n = Math.max(4, Math.min(32, n)); if (n % 2) n += 1;
+    const zoom = Math.max(1.2, Math.min(4, Number(this.props.zoom ?? 1.8)));
+    const seed = Number(this.props.seed ?? 0);
+    const t = st.t || 0;
+
+    // Keep the photo covering the whole disc: offset limit in image-width units.
+    const lim = (0.5 - 0.5 / zoom) * 0.94;
+    const clamp = (v) => Math.max(-1, Math.min(1, v));
+    const dx = Math.sin(t / 4700 + seed * 0.9);
+    const dy = Math.cos(t / 6100 + seed * 1.3);
+    const ux = clamp(0.45 * dx + 0.8 * (st.px || 0));
+    const uy = clamp(0.45 * dy + 0.8 * (st.py || 0));
+
+    const half = (180 / n + 0.35) * Math.PI / 180;
+    const k = Math.tan(half) * 52;
+    const clip = 'polygon(50% 50%, ' + (50 - k).toFixed(3) + '% -2%, ' + (50 + k).toFixed(3) + '% -2%)';
+    const spin = 'rotate(' + (st.theta || 0).toFixed(3) + 'deg)';
+    const shift = 'translate(-50%, -50%) translate(' + (ux * lim * 100).toFixed(3) + '%, ' + (uy * lim * 100).toFixed(3) + '%)';
+    const size = (zoom * 100).toFixed(2) + '%';
+    const src = this.props.src ?? '/_blob/a32aff0bace79be02909756860692637';
+
+    const wedges = [];
+    for (let i = 0; i < n; i++) {
+      wedges.push({
+        rot: 'rotate(' + (i * 360 / n) + 'deg)',
+        flip: i % 2 ? 'scaleX(-1)' : 'none',
+        clip, spin, shift, size, src
+      });
+    }
+
+    return {
+      wedges,
+      onMove: (e) => {
+        const r = e.currentTarget.getBoundingClientRect();
+        this.tx = clamp(((e.clientX - r.left) / r.width - 0.5) * 2);
+        this.ty = clamp(((e.clientY - r.top) / r.height - 0.5) * 2);
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>

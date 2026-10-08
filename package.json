@@ -1,0 +1,35 @@
+{
+  "name": "surfaces",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Surfaces — a texture archive with colour navigation and a kaleidoscope studio",
+  "scripts": {
+    "images": "node scripts/build-images.mjs",
+    "images:force": "node scripts/build-images.mjs --force",
+    "contact-sheet": "node scripts/contact-sheet.mjs",
+    "upload": "node scripts/upload-r2.mjs",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1148.0",
+    "@fontsource/big-shoulders-display": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@fontsource/instrument-sans": "^5.3.0",
+    "blurhash": "^2.0.5",
+    "exif-reader": "^2.0.3",
+    "sharp": "^0.35.5",
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4"
+  }
+}
