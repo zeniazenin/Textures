@@ -1,5 +1,5 @@
 # Deploys the site to Cloudflare (Worker "surfaces" with static assets, custom domain
-# textures.lttl.info) on every push to master. Images are not part of this: they are uploaded
+# textures.lttl.info) on every push to main. Images are not part of this: they are uploaded
 # to R2 from the owner's machine with `npm run upload`.
 #
 # Required repository secrets (GitHub → Settings → Secrets and variables → Actions):
@@ -10,7 +10,7 @@ name: Deploy site
 
 on:
   push:
-    branches: [master]
+    branches: [main]
   workflow_dispatch:
 
 concurrency:

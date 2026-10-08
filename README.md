@@ -87,7 +87,7 @@ $env:VITE_IMAGE_BASE = "https://img.textures.lttl.info"; npm run build; npx wran
 ```
 
 Automatic deploys from GitHub: `.github/workflows/deploy.yml` runs the same build + deploy on every
-push to `master`. It needs two repository secrets, `CLOUDFLARE_API_TOKEN` (dashboard → My Profile →
+push to `main`. It needs two repository secrets, `CLOUDFLARE_API_TOKEN` (dashboard → My Profile →
 API Tokens → "Edit Cloudflare Workers" template) and `CLOUDFLARE_ACCOUNT_ID`. Until those are set,
 deploy manually with the command above.
 
