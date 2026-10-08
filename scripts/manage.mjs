@@ -148,6 +148,23 @@ const server = http.createServer(async (req, res) => {
     json(res, 500, { error: String(err.message || err) });
   }
 });
+const URL_ = `http://localhost:${PORT}`;
+const OPEN = process.argv.includes('--open');
+function openBrowser(url) {
+  const cmd = process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]]
+    : process.platform === 'darwin' ? ['open', [url]] : ['xdg-open', [url]];
+  try { spawn(cmd[0], cmd[1], { stdio: 'ignore', detached: true }).unref(); } catch { /* ignore */ }
+}
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.log(`Surfaces manager is already running at ${URL_}`);
+    if (OPEN) openBrowser(URL_);
+    process.exit(0);
+  }
+  console.error(err); process.exit(1);
+});
 server.listen(PORT, '127.0.0.1', () => {
-  console.log(`Surfaces manager: http://localhost:${PORT}  (library: ${SRC})`);
+  console.log(`Surfaces manager: ${URL_}  (library: ${SRC})`);
+  console.log('Press Ctrl+C to stop.');
+  if (OPEN) openBrowser(URL_);
 });

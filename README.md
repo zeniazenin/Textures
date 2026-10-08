@@ -127,8 +127,10 @@ Why R2 and not the git repo: the derivatives are ~900 MB, Workers static assets 
 ## Adding and removing photos
 
 ```powershell
-npm run manage        # opens the local manager at http://localhost:5180
+npm run manage        # starts the local manager and opens it in your browser
 ```
+
+Or double-click `Manage.cmd` in the project folder (same thing, no terminal needed).
 
 The manager (owner-only, never deployed) shows every photo in spectrum order with its hue swatch.
 From there you can:
