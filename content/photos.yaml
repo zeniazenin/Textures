@@ -12,4 +12,17 @@
 # Variant groups are collapsed automatically (base + _Original / -EDIT / -01 ⇒ one photo,
 # preferring -EDIT > -01 > base > _Original). See generated/report.md after a build.
 
-{}
+20221016_172647:
+  hidden: true
+20221013_181819:
+  hidden: true
+20221019_180050_Original:
+  hidden: true
+20221017_145600:
+  hidden: true
+20221013_161847:
+  hidden: true
+20221012_171612:
+  hidden: true
+20221012_171614:
+  hidden: true

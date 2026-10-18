@@ -44,19 +44,27 @@ async function readToken() {
   throw new Error('No wrangler OAuth token found. Run `npx wrangler login` first.');
 }
 function refreshToken() {
-  try { execFileSync('npx', ['wrangler', 'whoami'], { stdio: 'ignore', shell: true }); } catch { /* ignore */ }
+  // Any wrangler command refreshes an expired OAuth access token using the stored refresh token.
+  try { execFileSync('npx', ['wrangler', 'whoami'], { stdio: 'ignore', shell: true, timeout: 60000 }); } catch { /* ignore */ }
 }
+const isAuthError = (r, j) => r.status === 401 || r.status === 403 || (j?.errors || []).some((e) => e.code === 9109 || e.code === 10000);
 
+// Validate the session once up front; refresh it if the access token has expired.
 let token = await readToken();
-const accountId = process.env.CLOUDFLARE_ACCOUNT_ID || await (async () => {
-  for (let attempt = 0; ; attempt++) {
-    const r = await fetch('https://api.cloudflare.com/client/v4/accounts', { headers: { Authorization: `Bearer ${token}` } });
-    const j = await r.json();
-    if (j.success && j.result?.length) return j.result[0].id;
-    if (r.status === 429 && attempt < 5) { await new Promise((res) => setTimeout(res, 5000 * (attempt + 1))); continue; }
-    throw new Error('Could not list accounts (set CLOUDFLARE_ACCOUNT_ID to skip this): ' + JSON.stringify(j.errors));
+let accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+for (let attempt = 0; ; attempt++) {
+  const r = await fetch('https://api.cloudflare.com/client/v4/accounts', { headers: { Authorization: `Bearer ${token}` } });
+  const j = await r.json().catch(() => ({}));
+  if (j.success && j.result?.length) { accountId ||= j.result[0].id; break; }
+  if (isAuthError(r, j) && attempt === 0) { console.log('Cloudflare session expired, refreshing via wrangler…'); refreshToken(); token = await readToken(); continue; }
+  if (r.status === 429 && attempt < 5) { await new Promise((res) => setTimeout(res, 5000 * (attempt + 1))); continue; }
+  if (isAuthError(r, j)) {
+    console.error('Cloudflare session could not be refreshed. Run `npx wrangler login` once, then publish again.');
+    process.exit(1);
   }
-})();
+  console.error('Cloudflare API error: ' + JSON.stringify(j.errors || r.status));
+  process.exit(1);
+}
 const base = `https://api.cloudflare.com/client/v4/accounts/${accountId}/r2/buckets/${BUCKET}/objects`;
 
 // Local files: only what the manifest publishes
